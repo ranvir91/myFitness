@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/constants/storage_keys.dart';
 import '../../core/models/hydration_entry.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/services/storage_service.dart';
@@ -8,9 +9,10 @@ import '../../core/services/storage_service.dart';
 class HydrationProvider extends ChangeNotifier {
   HydrationProvider(this._storage) {
     _load();
+    NotificationService.instance.dataVersion.addListener(_onExternalDataChanged);
   }
 
-  static const _entriesKey = 'hydration_entries';
+  static const _entriesKey = StorageKeys.hydrationEntries;
   static const _goalKey = 'hydration_goal_ml';
   static const _reminderEnabledKey = 'hydration_reminder_enabled';
   static const _reminderIntervalKey = 'hydration_reminder_interval_min';
@@ -69,13 +71,33 @@ class HydrationProvider extends ChangeNotifier {
     return streak;
   }
 
-  Future<void> _load() async {
-    final storedEntries = _storage.getJson<List<HydrationEntry>>(
+  List<HydrationEntry>? _readEntriesFromStorage() {
+    return _storage.getJson<List<HydrationEntry>>(
       _entriesKey,
       (decoded) => (decoded as List)
           .map((e) => HydrationEntry.fromJson(e as Map<String, dynamic>))
           .toList(),
     );
+  }
+
+  /// Re-reads entries written by [NotificationActionHandler] from a quick-log
+  /// notification action, so the UI reflects them without a restart.
+  void _onExternalDataChanged() {
+    final storedEntries = _readEntriesFromStorage();
+    if (storedEntries != null) {
+      _entries = storedEntries;
+      notifyListeners();
+    }
+  }
+
+  @override
+  void dispose() {
+    NotificationService.instance.dataVersion.removeListener(_onExternalDataChanged);
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final storedEntries = _readEntriesFromStorage();
     if (storedEntries != null) _entries = storedEntries;
 
     _goalMl = _storage.getInt(_goalKey) ?? 2000;
@@ -141,6 +163,7 @@ class HydrationProvider extends ChangeNotifier {
       intervalMinutes: _reminderIntervalMinutes,
       channelId: 'hydration',
       channelName: 'Hydration Reminders',
+      category: NotificationCategory.hydration,
     );
   }
 

@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/models/posture_check.dart';
+import '../../core/services/notification_service.dart';
 import 'posture_provider.dart';
 
 class PostureScreen extends StatelessWidget {
@@ -233,6 +234,26 @@ class _PostureSettingsSheetState extends State<_PostureSettingsSheet> {
               label: '${_interval.round()} min',
               onChanged: (v) => setState(() => _interval = v),
               onChangeEnd: (v) => provider.setReminderInterval(v.round()),
+            ),
+            const SizedBox(height: 4),
+            OutlinedButton.icon(
+              onPressed: () {
+                NotificationService.instance.showNow(
+                  id: 9002,
+                  title: 'Posture check 🧍',
+                  body: 'This is a test notification.',
+                  channelId: 'posture',
+                  channelName: 'Posture Reminders',
+                );
+                ScaffoldMessenger.of(context)
+                  ..hideCurrentSnackBar()
+                  ..showSnackBar(const SnackBar(
+                    content: Text('Test notification sent'),
+                    duration: Duration(seconds: 2),
+                  ));
+              },
+              icon: const Icon(Icons.notifications_active_outlined),
+              label: const Text('Send test notification'),
             ),
           ],
         ],

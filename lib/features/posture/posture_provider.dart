@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/constants/storage_keys.dart';
 import '../../core/models/posture_check.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/services/storage_service.dart';
@@ -8,9 +9,10 @@ import '../../core/services/storage_service.dart';
 class PostureProvider extends ChangeNotifier {
   PostureProvider(this._storage) {
     _load();
+    NotificationService.instance.dataVersion.addListener(_onExternalDataChanged);
   }
 
-  static const _historyKey = 'posture_history';
+  static const _historyKey = StorageKeys.postureHistory;
   static const _reminderEnabledKey = 'posture_reminder_enabled';
   static const _reminderIntervalKey = 'posture_reminder_interval_min';
   static const notificationId = 2001;
@@ -48,13 +50,33 @@ class PostureProvider extends ChangeNotifier {
   DateTime? get lastCheckTime =>
       _history.isEmpty ? null : _history.last.timestamp;
 
-  Future<void> _load() async {
-    final storedHistory = _storage.getJson<List<PostureCheck>>(
+  List<PostureCheck>? _readHistoryFromStorage() {
+    return _storage.getJson<List<PostureCheck>>(
       _historyKey,
       (decoded) => (decoded as List)
           .map((e) => PostureCheck.fromJson(e as Map<String, dynamic>))
           .toList(),
     );
+  }
+
+  /// Re-reads history written by [NotificationActionHandler] from a quick-log
+  /// notification action, so the UI reflects it without a restart.
+  void _onExternalDataChanged() {
+    final storedHistory = _readHistoryFromStorage();
+    if (storedHistory != null) {
+      _history = storedHistory;
+      notifyListeners();
+    }
+  }
+
+  @override
+  void dispose() {
+    NotificationService.instance.dataVersion.removeListener(_onExternalDataChanged);
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final storedHistory = _readHistoryFromStorage();
     if (storedHistory != null) _history = storedHistory;
 
     _reminderEnabled = _storage.getBool(_reminderEnabledKey) ?? false;
@@ -113,6 +135,7 @@ class PostureProvider extends ChangeNotifier {
       intervalMinutes: _reminderIntervalMinutes,
       channelId: 'posture',
       channelName: 'Posture Reminders',
+      category: NotificationCategory.posture,
     );
   }
 
